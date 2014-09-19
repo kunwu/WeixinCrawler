@@ -41,7 +41,12 @@ public class App {
     public static final int WAIT_INTERVAL_S = 1000;
     public static final int WAIT_INTERVAL_M = 3000;
 
+    public static final int RETRY_M = 2;
+
     public static final int MAX_MESSAGES_EACH_ACCOUNT = 100;
+
+    private static final boolean DBG_OUTPUT_MESSAGE_FULL_HTML = false;
+    private static final boolean DBG_OUTPUT_MESSAGE_LIST_HTML = false;
 
     private static BufferedWriter bwOutputFile = null;
 
@@ -165,7 +170,16 @@ public class App {
                         btnViewHistory.click();
 
                         trace("Wait for page (History) ... ", false);
-                        waitOnElement(driver, By.xpath("//android.widget.TextView[@text='history']"), 30);
+                        int retry = RETRY_M;
+                        while (retry-- > 0) {
+                            Thread.sleep(WAIT_INTERVAL_S);
+                            try {
+                                waitOnElement(driver, By.xpath("//android.widget.TextView[@text='history']"), 30);
+                                break;
+                            } catch (WebDriverException ignore) {
+                                trace("Retry " + (RETRY_M - retry) + " ", false);
+                            }
+                        }
                         trace("Loaded.");
 
                         trace("Get last request from proxy server ... ", false);
@@ -396,7 +410,9 @@ public class App {
 
         trace(response);
 
-        writeMessageInfo("MessageListResponse:" + response + EOL);
+        if (DBG_OUTPUT_MESSAGE_LIST_HTML) {
+            writeMessageInfo("MessageListResponse:" + response + EOL);
+        }
 
         String msgListInJson = null;
         Pattern reg = Pattern.compile("msgList\\s*=\\s*'?(.+?\\]\\})'?;");
@@ -450,16 +466,18 @@ public class App {
             RequestInfo ri = gson.fromJson(lastRequestInfo, RequestInfo.class);
             ri.url = formReportUrl(lastRequestInfo, contentUrl);
 
-            int sec = genSleepSecForNextFetch();
-            trace(String.format("Wait %d\" then fetch message content for %s %d/%d %s ... ", sec, weixinID, i, list.size(), title), false);
-            Thread.sleep(sec * 1000);
+            double sec = genSleepSecForNextFetch();
+            trace(String.format("Wait %.1f\" then fetch message content for %s %d/%d %s ... ", sec, weixinID, i, list.size(), title), false);
+            Thread.sleep((long) (sec * 1000));
             String resTest = fetchResponseByRequestInfoWithRetry(gson.toJson(ri), 1);
             trace("OK.");
             String readNum = extractReadNum(resTest);
             String likeNum = extractLikeNum(resTest);
-            writeMessageInfo(String.format("===== %d read %s like %s%s", i + 1, readNum, likeNum, EOL));
             writeMessageInfo(ri.url + EOL);
-            writeMessageInfo(resTest);
+            writeMessageInfo(String.format("===== %d read %s like %s%s", i + 1, readNum, likeNum, EOL));
+            if (DBG_OUTPUT_MESSAGE_FULL_HTML) {
+                writeMessageInfo(resTest);
+            }
 
             int msgItemIdx = 0;
             String crawlTs = String.valueOf(System.currentTimeMillis() / 1000L);
@@ -485,15 +503,18 @@ public class App {
 
                     ri.url = formReportUrl(lastRequestInfo, contentUrlMulti);
                     sec = genSleepSecForNextFetch();
-                    trace(String.format("Wait %d\" then fetch message content for %s %d/%d - %d/%d %s ... ", sec, weixinID, i, list.size(),
+                    trace(String.format("Wait %.1f\" then fetch message content for %s %d/%d - %d/%d %s ... ", sec, weixinID, i, list.size(),
                             j, multiAppMsgItemList.size(), titleMulti), false);
-                    Thread.sleep(sec * 1000);
+                    Thread.sleep((long) (sec * 1000));
                     resTest = fetchResponseByRequestInfoWithRetry(gson.toJson(ri), 1);
                     trace("OK");
                     String readNumMulti = extractReadNum(resTest);
                     String likeNumMulti = extractLikeNum(resTest);
+                    writeMessageInfo(ri.url + EOL);
                     writeMessageInfo(String.format("===== %d - %d read %s like %s%s", i + 1, j + 1, readNumMulti, likeNumMulti, EOL));
-                    writeMessageInfo(resTest);
+                    if (DBG_OUTPUT_MESSAGE_FULL_HTML) {
+                        writeMessageInfo(resTest);
+                    }
 
                     String crawlTsMulti = String.valueOf(System.currentTimeMillis() / 1000L);
                     addToMessageInfoMap(messageInfoList, weixinID, "" + (j + 1), id, dateTime,
@@ -515,8 +536,8 @@ public class App {
         return messageInfoList;
     }
 
-    private static int genSleepSecForNextFetch() {
-        return 1;
+    private static double genSleepSecForNextFetch() {
+        return 1.0 * WAIT_INTERVAL_XS / 1000;
     }
 
     private static void addToMessageInfoMap(List<HashMap<String, String>> messageInfoList,
