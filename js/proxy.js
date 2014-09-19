@@ -9,7 +9,11 @@ try {
 
         console.log('==> ' + req.url);
 
-        if (req.url.indexOf('http://mp.weixin.qq.com/mp/getmasssendmsg?') == 0) {
+        if (req.url.indexOf('http://monitor.uu.qq.com/analytics/upload') == 0) {
+            console.log('skip tencent analytics');
+            res.writeHead(200);
+            res.end();
+        } else if (req.url.indexOf('http://mp.weixin.qq.com/mp/getmasssendmsg?') == 0) {
             console.log(req.url);
             var aryHeaders = [];
             var idx = 0;
