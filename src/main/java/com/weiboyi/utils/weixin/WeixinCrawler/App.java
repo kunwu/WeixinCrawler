@@ -200,7 +200,7 @@ public class App {
 
                             writeMessageInfo("LastRequestInfo:" + lastRequestInfo + EOL);
 
-                            trace("Fetch history message info list ... ", false);
+                            trace("Fetch history message info list");
                             List<HashMap<String, String>> lstMessageInfoOneAccount = fetchHistoryMessageInfoList(weixinID, lastRequestInfo, dbgNoFetch);
                             trace("Found " + lstMessageInfoOneAccount.size() + ".");
 
@@ -258,12 +258,13 @@ public class App {
                         e.printStackTrace();
                     }
 
-                    trace(String.format("===== Latest round elapsed: %s of %s, processed %d of %d, avg: %.1f\""
+                    trace(String.format("===== Latest round elapsed: %s of %s, processed %d of %d, avg: %.1f\", est: %s"
                             , timer.addCheckpointAndGetLatestElapsed()
                             , timer.calcTotalElapsed()
                             , currentIndex + 1
                             , totalWeixinIDs
                             , 1.0 * timer.calcTotalElapsedInMill() / 1000 / (currentIndex + 1)
+                            , calcLeftEstimation(currentIndex + 1, totalWeixinIDs, timer.calcTotalElapsedInMill())
                     ));
                 }
 
@@ -300,10 +301,28 @@ public class App {
         }
 
         trace(EOL);
-        trace(String.format("Processed: %d/%d", currentIndex + 1, totalWeixinIDs));
+        trace(String.format("Processed: %d/%d @ %s", currentIndex + 1, totalWeixinIDs,
+                (new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")).format(new Date())));
         trace(String.format("===== Total elapsed: %s, avg: %.1f", timer.addCheckpointAndGetTotalElapsed()
                 , 1.0 * timer.calcTotalElapsedInMill() / 1000 / (currentIndex + 1)
         ));
+    }
+
+    private static String calcLeftEstimation(int processed, int totalWeixinIDs, long elapsedInMill) {
+        if (processed == 0) {
+            return "N/A";
+        }
+        long leftInMill = (totalWeixinIDs - processed) * elapsedInMill / processed;
+        int hr = Math.round(leftInMill / 3600000);
+        int min = Math.round(leftInMill % 3600000 / 60000);
+        double sec = 1.0 * (leftInMill % 60000) / 1000;
+
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(new Date());
+        cal.add(Calendar.MILLISECOND, (int) leftInMill);
+
+        return String.format("%02d:%02d:%02.1f(%s)", hr, min, sec
+                , (new SimpleDateFormat("MM/dd HH:mm")).format(cal.getTime()));
     }
 
     private static String searchUnderOfficialAccountsMode(AppiumDriver driver, String stage, String weixinID, int currentIndex, int total) throws InterruptedException, ElementNotFoundException, IOException {
@@ -405,11 +424,11 @@ public class App {
         }
 
 //        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        Gson gson = new Gson();
+        Gson gson = new GsonBuilder().serializeNulls().create();
 
         for (HashMap<String, String> msgInfo : lstMsgInfo) {
             String s = gson.toJson(msgInfo);
-            trace(s);
+//            trace(s);
             bwToStorage.write(s);
             bwToStorage.newLine();
         }
@@ -432,9 +451,8 @@ public class App {
         String response = fetchResponseByRequestInfoWithRetry(lastRequestInfo, 1);
         response = StringEscapeUtils.unescapeJava(StringEscapeUtils.unescapeHtml4(response));
 
-        trace(response);
-
         if (DBG_OUTPUT_MESSAGE_LIST_HTML) {
+            trace(response);
             writeMessageInfo("MessageListResponse:" + response + EOL);
         }
 
@@ -561,7 +579,7 @@ public class App {
 
         String msgListInfoAll = sbMsg.toString();
         trace(msgListInfoAll);
-        writeMessageInfo("MessageListInfoAll:" + msgListInfoAll + EOL);
+        writeMessageInfo("MessageListInfoAll:" + EOL + msgListInfoAll + EOL);
 
         return messageInfoList;
     }

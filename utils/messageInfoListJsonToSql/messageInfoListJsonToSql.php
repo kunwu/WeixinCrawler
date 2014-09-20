@@ -59,15 +59,21 @@ foreach($jsonLines as $json) {
     $likeNum = is_numeric($msgInfoOneEntry->LikeNum) ? $msgInfoOneEntry->LikeNum : 0;
     $title = utils::removeEmoji($dbLink->real_escape_string($msgInfoOneEntry->Title));
     $contentURL = utils::removeEmoji($dbLink->real_escape_string($msgInfoOneEntry->ContentURL));
+    if (isset($msgInfoOneEntry->IsMulti)) {
+        $isMulti = $msgInfoOneEntry->IsMulti;
+    } else {
+        $isMulti = 'null';
+    }
 
     $sql = "
 INSERT INTO babysitter_weixin_message_info_fetch_history
-(weixin_id, message_group_id, message_item_index, title, content_url, publish_time, read_num, like_num, fetched_time)
+(weixin_id, message_group_id, message_item_index, is_multi, title, content_url, publish_time, read_num, like_num, fetched_time)
 VALUES
 (
 '{$weixinID}'
 , {$msgInfoOneEntry->MessageGroupId}
 , {$msgInfoOneEntry->MessageItemIndex}
+, {$isMulti}
 , '{$title}'
 , '{$contentURL}'
 , from_unixtime({$msgInfoOneEntry->PublishTimestamp})
