@@ -13,6 +13,8 @@ public class AccountGenerator {
     public static final String FILENAME_ARCHIVED = "ArchivedWeixinID.txt";
     private static Iterator<String> ite = null;
     private static List<String> lstWeixinID = null;
+    private static int total;
+    private static int index;
 
     public static void LoadWeixinIDList(Boolean isSearchOfficalsMode) throws IOException {
         lstWeixinID = new ArrayList<String>(10);
@@ -23,14 +25,25 @@ public class AccountGenerator {
         lstWeixinID.removeAll(archived);
 
         ite = lstWeixinID.iterator();
+        total = lstWeixinID.size();
+        index = -1;
     }
 
     public static String GetNextWeixinID()  {
         if (ite.hasNext()) {
+            index++;
             return ite.next();
         } else {
             return null;
         }
+    }
+
+    public static int GetCurrentIndex() {
+        return index;
+    }
+
+    public static int GetTotal() {
+        return total;
     }
 
     public static int size() {

@@ -37,6 +37,7 @@ public class App {
     public static final String SEARCH_MODE_DIRECT = "DIRECT";
     public static final String SEARCH_MODE_OFFICIAL = "OFFICIAL";
 
+    public static final int WAIT_INTERVAL_XXS = 100;
     public static final int WAIT_INTERVAL_XS = 500;
     public static final int WAIT_INTERVAL_S = 1000;
     public static final int WAIT_INTERVAL_M = 3000;
@@ -65,7 +66,6 @@ public class App {
 
         prepareOutputFile();
 
-
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
 
         URL serverUrl = new URL("http://127.0.0.1:4723/wd/hub");
@@ -81,6 +81,11 @@ public class App {
         capabilities.setCapability("noReset", "true");
         capabilities.setCapability("newCommandTimeout", "86400");
         AppiumDriver driver = null;
+
+        ElapseTimer timer = new ElapseTimer();
+        int currentIndex = 0;
+        int totalWeixinIDs = 0;
+
         try {
             trace("Create driver ... ", false);
             driver = new AppiumDriver(serverUrl, capabilities);
@@ -88,6 +93,8 @@ public class App {
 
             trace("Wait 3\" for init.");
             Thread.sleep(WAIT_INTERVAL_M);
+
+            timer.addCheckpoint();
 
             try {
                 while (true) {
@@ -97,6 +104,8 @@ public class App {
                         trace("No more weixin ID.");
                         break;
                     }
+                    currentIndex = AccountGenerator.GetCurrentIndex();
+                    totalWeixinIDs = AccountGenerator.GetTotal();
 
                     trace("Wait for page (Add Contacts) ... ", false);
                     WebDriverWait waitInputSearchById = new WebDriverWait(driver, 5);
@@ -104,7 +113,9 @@ public class App {
                     trace("Found.");
 
                     if (searchAccountMode.equals(SEARCH_MODE_DIRECT)) {
-                        trace("Locate input (weixin ID) ... ", false);
+                        trace(String.format("Locate input (weixin ID) %d/%d ... "
+                                , currentIndex + 1, totalWeixinIDs)
+                                , false);
                         WebElement elmInputWeixinID = driver.findElement(By.xpath(PAGE_ADD_CONTACTS_INPUT_WEIXIN_ID));
                         trace("Located.");
 
@@ -131,7 +142,7 @@ public class App {
                             Integer choiceIndex = trySwitch(driver, lstCaseSearchWeixinIDResult, 10);
                             if (choiceIndex == null) {
                                 if (trySearchUnderOfficialAccountsModeIfDirectModeFailed) {
-                                    stage = searchUnderOfficialAccountsMode(driver, stage, weixinID);
+                                    stage = searchUnderOfficialAccountsMode(driver, stage, weixinID, currentIndex, totalWeixinIDs);
                                 } else {
                                     throw new ElementNotFoundException("Weixin ID search result not found on activity:" + driver.currentActivity());
                                 }
@@ -155,47 +166,49 @@ public class App {
                         }
                     } else if (searchAccountMode.equals(SEARCH_MODE_OFFICIAL)) {
                         try {
-                            stage = searchUnderOfficialAccountsMode(driver, stage, weixinID);
+                            stage = searchUnderOfficialAccountsMode(driver, stage, weixinID, currentIndex, totalWeixinIDs);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
                     }
 
                     try {
-                        trace("Locate button (View History) ... ", false);
-                        WebElement btnViewHistory = driver.findElement(By.xpath("//android.widget.TextView[@text='View history' or @text='查看历史消息']"));
-                        trace("Found.");
+                        if (stage.equals(STAGE_PROFILE)) {
+                            trace("Locate button (View History) ... ", false);
+                            WebElement btnViewHistory = driver.findElement(By.xpath("//android.widget.TextView[@text='View history' or @text='查看历史消息']"));
+                            trace("Found.");
 
-                        trace("Click button (View History)");
-                        btnViewHistory.click();
+                            trace("Click button (View History)");
+                            btnViewHistory.click();
 
-                        trace("Wait for page (History) ... ", false);
-                        int retry = RETRY_M;
-                        while (retry-- > 0) {
-                            Thread.sleep(WAIT_INTERVAL_S);
-                            try {
-                                waitOnElement(driver, By.xpath("//android.widget.TextView[@text='history']"), 30);
-                                break;
-                            } catch (WebDriverException ignore) {
-                                trace("Retry " + (RETRY_M - retry) + " ", false);
+                            trace("Wait for page (History) ... ", false);
+                            int retry = RETRY_M;
+                            while (retry-- > 0) {
+                                Thread.sleep(WAIT_INTERVAL_S);
+                                try {
+                                    waitOnElement(driver, By.xpath("//android.widget.TextView[@text='history']"), 30);
+                                    break;
+                                } catch (WebDriverException ignore) {
+                                    trace("Retry " + (RETRY_M - retry) + " ", false);
+                                }
                             }
+                            trace("Loaded.");
+
+                            trace("Get last request from proxy server ... ", false);
+                            String lastRequestInfo = getLastRequestFromProxyServer();
+                            trace(lastRequestInfo);
+
+                            writeMessageInfo("LastRequestInfo:" + lastRequestInfo + EOL);
+
+                            trace("Fetch history message info list ... ", false);
+                            List<HashMap<String, String>> lstMessageInfoOneAccount = fetchHistoryMessageInfoList(weixinID, lastRequestInfo, dbgNoFetch);
+                            trace("Found " + lstMessageInfoOneAccount.size() + ".");
+
+                            writeMessageInfoList(lstMessageInfoOneAccount);
+                            AccountGenerator.ArchiveWeixinIDCompleted(weixinID);
+
+                            stage = STAGE_HISTORY;
                         }
-                        trace("Loaded.");
-
-                        trace("Get last request from proxy server ... ", false);
-                        String lastRequestInfo = getLastRequestFromProxyServer();
-                        trace(lastRequestInfo);
-
-                        writeMessageInfo("LastRequestInfo:" + lastRequestInfo + EOL);
-
-                        trace("Fetch history message info list ... ", false);
-                        List<HashMap<String, String>> lstMessageInfoOneAccount = fetchHistoryMessageInfoList(weixinID, lastRequestInfo, dbgNoFetch);
-                        trace("Found " + lstMessageInfoOneAccount.size() + ".");
-
-                        writeMessageInfoList(lstMessageInfoOneAccount);
-                        AccountGenerator.ArchiveWeixinIDCompleted(weixinID);
-
-                        stage = STAGE_HISTORY;
                     } catch (NoSuchElementException e) {
                         trace("\tNo history found. Skip.");
                     } catch (ConnectException eCE) {
@@ -244,6 +257,14 @@ public class App {
                         trace(e.getMessage());
                         e.printStackTrace();
                     }
+
+                    trace(String.format("===== Latest round elapsed: %s of %s, processed %d of %d, avg: %.1f\""
+                            , timer.addCheckpointAndGetLatestElapsed()
+                            , timer.calcTotalElapsed()
+                            , currentIndex + 1
+                            , totalWeixinIDs
+                            , 1.0 * timer.calcTotalElapsedInMill() / 1000 / (currentIndex + 1)
+                    ));
                 }
 
             } catch (NoSuchElementException e) {
@@ -271,24 +292,27 @@ public class App {
 
         {
             System.out.print(e.getMessage() + Arrays.toString(e.getStackTrace()));
-        } finally
-
-        {
+        } finally {
             if (driver != null) {
                 driver.quit();
             }
             closeOutputFile();
         }
 
+        trace(EOL);
+        trace(String.format("Processed: %d/%d", currentIndex + 1, totalWeixinIDs));
+        trace(String.format("===== Total elapsed: %s, avg: %.1f", timer.addCheckpointAndGetTotalElapsed()
+                , 1.0 * timer.calcTotalElapsedInMill() / 1000 / (currentIndex + 1)
+        ));
     }
 
-    private static String searchUnderOfficialAccountsMode(AppiumDriver driver, String stage, String weixinID) throws InterruptedException, ElementNotFoundException, IOException {
+    private static String searchUnderOfficialAccountsMode(AppiumDriver driver, String stage, String weixinID, int currentIndex, int total) throws InterruptedException, ElementNotFoundException, IOException {
         trace("Locate and click item (Official Accounts) ... ", false);
         WebElement elmOfficialAccounts = driver.findElement(By.xpath("//android.widget.TextView[@text='Official Accounts']"));
         elmOfficialAccounts.click();
         trace("OK.");
 
-        trace(String.format("Locate and input weixin ID (%s) ... ", weixinID), false);
+        trace(String.format("Locate and input weixin ID (%s) %d/%d ... ", weixinID, currentIndex + 1, total), false);
         new WebDriverWait(driver, 5).until(ExpectedConditions.presenceOfElementLocated(By.xpath("//android.widget.EditText[@text='Official Accounts']")));
         WebElement inputWeixinIDOfficial = driver.findElement(By.xpath("//android.widget.EditText[@text='Official Accounts']"));
         try {
@@ -467,17 +491,20 @@ public class App {
             ri.url = formReportUrl(lastRequestInfo, contentUrl);
 
             double sec = genSleepSecForNextFetch();
-            trace(String.format("Wait %.1f\" then fetch message content for %s %d/%d %s ... ", sec, weixinID, i, list.size(), title), false);
+            trace(String.format("Wait %.1f\" then fetch message content for %s %d/%d %s ... ", sec, weixinID, i + 1, list.size(), title), false);
             Thread.sleep((long) (sec * 1000));
             String resTest = fetchResponseByRequestInfoWithRetry(gson.toJson(ri), 1);
             trace("OK.");
             String readNum = extractReadNum(resTest);
             String likeNum = extractLikeNum(resTest);
             writeMessageInfo(ri.url + EOL);
-            writeMessageInfo(String.format("===== %d read %s like %s%s", i + 1, readNum, likeNum, EOL));
+            String report = String.format("===== %d read %s like %s%s", i + 1, readNum, likeNum, EOL);
+            writeMessageInfo(report);
             if (DBG_OUTPUT_MESSAGE_FULL_HTML) {
                 writeMessageInfo(resTest);
             }
+            sbMsg.append("URL_real:").append(ri.url).append(EOL);
+            sbMsg.append("Report:").append(report);
 
             int msgItemIdx = 0;
             String crawlTs = String.valueOf(System.currentTimeMillis() / 1000L);
@@ -503,18 +530,21 @@ public class App {
 
                     ri.url = formReportUrl(lastRequestInfo, contentUrlMulti);
                     sec = genSleepSecForNextFetch();
-                    trace(String.format("Wait %.1f\" then fetch message content for %s %d/%d - %d/%d %s ... ", sec, weixinID, i, list.size(),
-                            j, multiAppMsgItemList.size(), titleMulti), false);
+                    trace(String.format("Wait %.1f\" then fetch message content for %s %d/%d - %d/%d %s ... ", sec, weixinID, i + 1, list.size(),
+                            j + 1, multiAppMsgItemList.size(), titleMulti), false);
                     Thread.sleep((long) (sec * 1000));
                     resTest = fetchResponseByRequestInfoWithRetry(gson.toJson(ri), 1);
                     trace("OK");
                     String readNumMulti = extractReadNum(resTest);
                     String likeNumMulti = extractLikeNum(resTest);
                     writeMessageInfo(ri.url + EOL);
-                    writeMessageInfo(String.format("===== %d - %d read %s like %s%s", i + 1, j + 1, readNumMulti, likeNumMulti, EOL));
+                    report = String.format("===== %d - %d read %s like %s%s", i + 1, j + 1, readNumMulti, likeNumMulti, EOL);
+                    writeMessageInfo(report);
                     if (DBG_OUTPUT_MESSAGE_FULL_HTML) {
                         writeMessageInfo(resTest);
                     }
+                    sbMsg.append("URL_real:").append(ri.url).append(EOL);
+                    sbMsg.append("Report:").append(report);
 
                     String crawlTsMulti = String.valueOf(System.currentTimeMillis() / 1000L);
                     addToMessageInfoMap(messageInfoList, weixinID, "" + (j + 1), id, dateTime,
@@ -537,7 +567,7 @@ public class App {
     }
 
     private static double genSleepSecForNextFetch() {
-        return 1.0 * WAIT_INTERVAL_XS / 1000;
+        return 1.0 * WAIT_INTERVAL_XXS / 1000;
     }
 
     private static void addToMessageInfoMap(List<HashMap<String, String>> messageInfoList,
@@ -664,9 +694,12 @@ public class App {
         BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
         StringBuilder sb = new StringBuilder();
         String line;
-        while ((line = br.readLine()) != null) {
-            sb.append(line);
-            sb.append(EOL);
+        try {
+            while ((line = br.readLine()) != null) {
+                sb.append(line);
+                sb.append(EOL);
+            }
+        } catch (IOException ignore) {
         }
         String response = sb.toString();
         br.close();
