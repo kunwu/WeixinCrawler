@@ -23,13 +23,13 @@ try {
                     aryHeaders[idx++] = k + '\t' + req.headers[k];
                 }
             }
-            requestInfoForHistoryList = JSON.stringify({url:req.url, headers:aryHeaders});
+            requestInfoForHistoryList = JSON.stringify({url: req.url, headers: aryHeaders});
 
             var fs = require('fs');
             var dir = './log';
             var path = dir + '/historyList_' + new Date().toISOString().replace(/(^\d{1,4})\D(\d{1,2})\D(\d{1,2}).*$/, '$1$2$3') + '.txt';
 
-            fs.exists(dir, function(exists) {
+            fs.exists(dir, function (exists) {
                 if (!exists) {
                     fs.mkdirSync(dir);
                 }
@@ -44,6 +44,7 @@ try {
             res.writeHead(200);
             res.write(requestInfoForHistoryList);
             res.end();
+            requestInfoForHistoryList = '';
         } else {
             console.log('skip unknown traffic.')
 //            proxy.web(req, res, { target: req.url });
@@ -52,7 +53,7 @@ try {
         }
     });
 
-    proxy.on('error', function(e, req, res) {
+    proxy.on('error', function (e, req, res) {
         var errorMessage = "Error caught:" + e.code + ":" + e.message;
         console.log(errorMessage);
         res.writeHead(500, {
