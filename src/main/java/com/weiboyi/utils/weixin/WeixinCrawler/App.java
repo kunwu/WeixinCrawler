@@ -49,6 +49,9 @@ public class App {
     private static final boolean DBG_OUTPUT_MESSAGE_FULL_HTML = false;
     private static final boolean DBG_OUTPUT_MESSAGE_LIST_HTML = false;
 
+    // use mid for group id, other than comm_msg_info.id
+    private static final boolean GROUP_ID_USE_MID = true;
+
     private static BufferedWriter bwOutputFile = null;
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -499,6 +502,7 @@ public class App {
 
             JsonObject commMsgInfo = msgInfo.get("comm_msg_info").getAsJsonObject();
 
+            // comm_msg_info.id from original weixin JSON response
             String id = commMsgInfo.get("id").getAsString();
             String type = commMsgInfo.get("type").getAsString();
             if (!type.equals("49")) {
@@ -518,6 +522,8 @@ public class App {
             Date d = new Date(Long.parseLong(dateTime) * 1000);
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
             String strDateTime = (sdf.format(d));
+            String mid = extractMidFromContentUrl(contentUrl);
+            String groupId = formGroupId(id, mid);
 
             sbMsg.append("id:").append(id).append(EOL);
             sbMsg.append("fileid:").append(fileid).append(EOL);
@@ -547,7 +553,7 @@ public class App {
 
             int msgItemIdx = 0;
             String crawlTs = String.valueOf(System.currentTimeMillis() / 1000L);
-            addToMessageInfoMap(messageInfoList, weixinID, "" + msgItemIdx, id, dateTime,
+            addToMessageInfoMap(messageInfoList, weixinID, "" + msgItemIdx, groupId, id, dateTime,
                     title, contentUrl, fileid, is_multi, readNum, likeNum, crawlTs);
             if (++cntMessage >= MAX_MESSAGES_EACH_ACCOUNT) {
                 break;
@@ -586,7 +592,7 @@ public class App {
                     sbMsg.append("Report:").append(report);
 
                     String crawlTsMulti = String.valueOf(System.currentTimeMillis() / 1000L);
-                    addToMessageInfoMap(messageInfoList, weixinID, "" + (j + 1), id, dateTime,
+                    addToMessageInfoMap(messageInfoList, weixinID, "" + (j + 1), groupId, id, dateTime,
                             titleMulti, contentUrlMulti, fileidMulti, null, readNumMulti, likeNumMulti, crawlTsMulti);
                     if (++cntMessage >= MAX_MESSAGES_EACH_ACCOUNT) {
                         break;
@@ -605,13 +611,31 @@ public class App {
         return messageInfoList;
     }
 
+    private static String extractMidFromContentUrl(String contentUrl) {
+        Pattern reg = Pattern.compile("mid=(\\d+)&");
+        Matcher m = reg.matcher(contentUrl);
+        if (m.find()) {
+            return m.group(1);
+        }
+
+        return "";
+    }
+
+    private static String formGroupId(String commMsgInfoId, String mid) {
+        if (GROUP_ID_USE_MID) {
+            return mid;
+        } else {
+            return commMsgInfoId;
+        }
+    }
+
     private static double genSleepSecForNextFetch() {
         return 1.0 * WAIT_INTERVAL_XXS / 1000;
     }
 
     private static void addToMessageInfoMap(List<HashMap<String, String>> messageInfoList,
                                             String weixinID,
-                                            String msgItemIdx, String msgGroupId, String publishTimestmp,
+                                            String msgItemIdx, String msgGroupId, String commMsgInfoId, String publishTimestmp,
                                             String title, String contentUrl, String fileid, String isMulti,
                                             String readNum, String likeNum,
                                             String crawlTs
@@ -620,6 +644,7 @@ public class App {
         msgInfoMap.put("WeixinID", weixinID);
         msgInfoMap.put("MessageItemIndex", msgItemIdx);
         msgInfoMap.put("MessageGroupId", msgGroupId);
+        msgInfoMap.put("CommMsgInfoId", commMsgInfoId);
         msgInfoMap.put("PublishTimestamp", publishTimestmp);
         msgInfoMap.put("Title", title);
         msgInfoMap.put("ContentURL", contentUrl);
