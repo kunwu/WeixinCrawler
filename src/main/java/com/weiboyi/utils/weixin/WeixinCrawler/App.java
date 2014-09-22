@@ -202,19 +202,26 @@ public class App {
 
                             trace("Fetch history message info list");
                             List<HashMap<String, String>> lstMessageInfoOneAccount = fetchHistoryMessageInfoList(weixinID, lastRequestInfo, dbgNoFetch);
-                            trace("Found " + lstMessageInfoOneAccount.size() + ".");
+                            if (lstMessageInfoOneAccount == null) {
+                                // failed to fetch history message info list
+                            } else {
+                                trace("Found " + lstMessageInfoOneAccount.size() + ".");
 
-                            writeMessageInfoList(lstMessageInfoOneAccount);
-                            AccountGenerator.ArchiveWeixinIDCompleted(weixinID);
+                                writeMessageInfoList(lstMessageInfoOneAccount);
+                                AccountGenerator.ArchiveWeixinIDCompleted(weixinID);
+                            }
 
                             stage = STAGE_HISTORY;
                         }
                     } catch (NoSuchElementException e) {
                         trace("\tNo history found. Skip.");
                     } catch (ConnectException eCE) {
-                        trace("\tFailed to get request info. Skip.");
+                        trace("\tFailed to get request info from proxy due to connection error. Proxy program error likely. Stop.");
 //                        stage = STAGE_HISTORY;
                         throw new Exception("Failed to fetch last request info. Please check your proxy program.");
+                    } catch (IOException eIE) {
+                        trace("\tFailed to get request info from proxy. Skip.");
+                        stage = STAGE_HISTORY;
                     }
 
                     try {
@@ -463,11 +470,24 @@ public class App {
             msgListInJson = m.group(1);
         }
 
+        if (msgListInJson == null) {
+            trace("Failed to parse history message list info. response as below:");
+            trace(response);
+            return null;
+        }
+
         trace("Message meta-data info list ... ", false);
         trace(msgListInJson);
 
         JsonParser parser = new JsonParser();
-        JsonObject msgListObj = parser.parse(msgListInJson).getAsJsonObject();
+        JsonObject msgListObj;
+        try {
+            msgListObj = parser.parse(msgListInJson).getAsJsonObject();
+        } catch (Exception e) {
+            trace("Failed to parse history message list info. Possible reason, update is required. response as below:");
+            trace(response);
+            return null;
+        }
 
         StringBuilder sbMsg = new StringBuilder();
         JsonArray list = msgListObj.get("list").getAsJsonArray();
