@@ -204,6 +204,7 @@ public class App {
                             List<HashMap<String, String>> lstMessageInfoOneAccount = fetchHistoryMessageInfoList(weixinID, lastRequestInfo, dbgNoFetch);
                             if (lstMessageInfoOneAccount == null) {
                                 // failed to fetch history message info list
+                                trace("Failed.");
                             } else {
                                 trace("Found " + lstMessageInfoOneAccount.size() + ".");
 
