@@ -201,6 +201,9 @@ public class App {
                             trace("Get last request from proxy server ... ", false);
                             String lastRequestInfo = getLastRequestFromProxyServer();
                             trace(lastRequestInfo);
+                            if (lastRequestInfo == null) {
+                                throw new Exception("lastRequestInfo is null. Check proxy program, please.");
+                            }
 
                             writeMessageInfo("LastRequestInfo:" + lastRequestInfo + EOL);
 
@@ -462,6 +465,10 @@ public class App {
         }
 
         String response = fetchResponseByRequestInfoWithRetry(lastRequestInfo, 3);
+        if (response == null) {
+            trace("Failed to fetch history message list.");
+            return null;
+        }
         response = StringEscapeUtils.unescapeJava(StringEscapeUtils.unescapeHtml4(response));
 
         if (DBG_OUTPUT_MESSAGE_LIST_HTML) {
@@ -728,6 +735,11 @@ public class App {
     }
 
     private static String fetchResponseByRequestInfoWithRetry(String requestInfo, int maxRetry) throws IOException, InterruptedException {
+        if (requestInfo == null) {
+            trace("requestInfo is null.");
+            return null;
+        }
+
         int retry = 0;
         do {
             try {

@@ -2,6 +2,7 @@
 <project version="4">
   <component name="SqlDialectMappings">
     <file url="file://$PROJECT_DIR$/utils/messageInfoListJsonToSql/babysitter_weixin_message_info_fetch_history.sql" dialect="MySQL" />
+    <file url="mock:///messageInfoListJsonToSql.php" dialect="MySQL" />
   </component>
 </project>
 
