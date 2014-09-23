@@ -190,6 +190,7 @@ class logger
 {
     private static $logFilePath = null;
     private static $sqlFilePath = null;
+    private static $tsBegin = null;
 
     public static function info($msg)
     {
@@ -205,7 +206,7 @@ class logger
                 mkdir($folder);
             }
 
-            self::$logFilePath = $folder . DIRECTORY_SEPARATOR . basename(__FILE__, ".php") . date('_Ymd') . ".log";
+            self::$logFilePath = $folder . DIRECTORY_SEPARATOR . basename(__FILE__, ".php") . "_" . self::formTs() . ".log";
             touch(self::$logFilePath);
         }
     }
@@ -218,7 +219,7 @@ class logger
                 mkdir($folder);
             }
 
-            self::$sqlFilePath = $folder . DIRECTORY_SEPARATOR . basename(__FILE__, ".php") . date('_Ymd') . ".sql";
+            self::$sqlFilePath = $folder . DIRECTORY_SEPARATOR . basename(__FILE__, ".php") . "_" . self::formTs() . ".sql";
             touch(self::$logFilePath);
         }
     }
@@ -253,5 +254,12 @@ class logger
         file_put_contents(self::$sqlFilePath, $sql, FILE_APPEND);
 
         echo $sql;
+    }
+
+    private static function formTs()
+    {
+        if (self::$tsBegin == null);
+            self::$tsBegin = date('Ymd_His');
+        return self::$tsBegin;
     }
 }
