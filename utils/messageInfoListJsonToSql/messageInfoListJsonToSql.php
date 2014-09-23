@@ -65,10 +65,6 @@ foreach ($jsonLines as $json) {
         $isMulti = 'null';
     }
 
-    if ($msgInfoOneEntry->MessageGroupId == 35408) {
-        print_r($msgInfoOneEntry);
-    }
-
     $mid = utils::extractMid($contentURL);
     $appmsgid = utils::extractAppMsgId($contentURL);
     if (empty($msgInfoOneEntry->MessageGroupId)) {
@@ -113,6 +109,14 @@ VALUES
 $dbLink->close();
 
 $sqlOutput = PHP_EOL . implode(PHP_EOL, $sqlList);
+
+logger::sql($sqlOutput);
+logger::sql(PHP_EOL);
+logger::sql("
+set session sql_safe_updates = 0;
+update babysitter_weixin_message_info_fetch_history h left join babysitter_account a on a.weibo_id = h.weixin_id and a.weibo_type = 9 set h.account_id = a.account_id where h.account_id is null;
+");
+
 logger::info($sqlOutput);
 
 logger::info("END.");
@@ -185,6 +189,7 @@ END;
 class logger
 {
     private static $logFilePath = null;
+    private static $sqlFilePath = null;
 
     public static function info($msg)
     {
@@ -205,16 +210,34 @@ class logger
         }
     }
 
+    private static function makeSureSqlFileExists()
+    {
+        if (self::$sqlFilePath == null) {
+            $folder = __DIR__ . DIRECTORY_SEPARATOR . "sql";
+            if (!file_exists($folder)) {
+                mkdir($folder);
+            }
+
+            self::$sqlFilePath = $folder . DIRECTORY_SEPARATOR . basename(__FILE__, ".php") . date('_Ymd') . ".sql";
+            touch(self::$logFilePath);
+        }
+    }
+
     public static function error($msg)
     {
         self::write($msg, "ERROR");
+    }
+
+    public static function sql($sql)
+    {
+        self::writeSql($sql);
     }
 
     /**
      * @param $msg
      * @param $type
      */
-    public static function write($msg, $type)
+    private static function write($msg, $type)
     {
         $output = $type . "|" . date('Ymd_His|') . $msg . PHP_EOL;
 
@@ -222,5 +245,13 @@ class logger
         file_put_contents(self::$logFilePath, $output, FILE_APPEND);
 
         echo $output;
+    }
+
+    private static function writeSql($sql)
+    {
+        self::makeSureSqlFileExists();
+        file_put_contents(self::$sqlFilePath, $sql, FILE_APPEND);
+
+        echo $sql;
     }
 }
