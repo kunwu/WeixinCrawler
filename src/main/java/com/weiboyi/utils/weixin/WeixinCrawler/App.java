@@ -41,6 +41,7 @@ public class App {
     public static final int WAIT_INTERVAL_XS = 500;
     public static final int WAIT_INTERVAL_S = 1000;
     public static final int WAIT_INTERVAL_M = 3000;
+    private static final int WAIT_INTERVAL_L = 10000;
 
     public static final int RETRY_M = 2;
 
@@ -303,7 +304,8 @@ public class App {
                 )
 
         {
-            System.out.print(e.getMessage() + Arrays.toString(e.getStackTrace()));
+            trace("Exception:" + e.getMessage());
+            e.printStackTrace();
         } finally {
             if (driver != null) {
                 driver.quit();
@@ -336,7 +338,7 @@ public class App {
                 , (new SimpleDateFormat("MM/dd HH:mm")).format(cal.getTime()));
     }
 
-    private static String searchUnderOfficialAccountsMode(AppiumDriver driver, String stage, String weixinID, int currentIndex, int total) throws InterruptedException, ElementNotFoundException, IOException {
+    private static String searchUnderOfficialAccountsMode(AppiumDriver driver, String stage, String weixinID, int currentIndex, int total) throws Exception {
         trace("Locate and click item (Official Accounts) ... ", false);
         WebElement elmOfficialAccounts = driver.findElement(By.xpath("//android.widget.TextView[@text='Official Accounts']"));
         elmOfficialAccounts.click();
@@ -459,7 +461,7 @@ public class App {
             return messageInfoList;
         }
 
-        String response = fetchResponseByRequestInfoWithRetry(lastRequestInfo, 1);
+        String response = fetchResponseByRequestInfoWithRetry(lastRequestInfo, 3);
         response = StringEscapeUtils.unescapeJava(StringEscapeUtils.unescapeHtml4(response));
 
         if (DBG_OUTPUT_MESSAGE_LIST_HTML) {
@@ -538,7 +540,7 @@ public class App {
             double sec = genSleepSecForNextFetch();
             trace(String.format("Wait %.1f\" then fetch message content for %s %d/%d %s ... ", sec, weixinID, i + 1, list.size(), title), false);
             Thread.sleep((long) (sec * 1000));
-            String resTest = fetchResponseByRequestInfoWithRetry(gson.toJson(ri), 1);
+            String resTest = fetchResponseByRequestInfoWithRetry(gson.toJson(ri), 3);
             trace("OK.");
             String readNum = extractReadNum(resTest);
             String likeNum = extractLikeNum(resTest);
@@ -578,7 +580,7 @@ public class App {
                     trace(String.format("Wait %.1f\" then fetch message content for %s %d/%d - %d/%d %s ... ", sec, weixinID, i + 1, list.size(),
                             j + 1, multiAppMsgItemList.size(), titleMulti), false);
                     Thread.sleep((long) (sec * 1000));
-                    resTest = fetchResponseByRequestInfoWithRetry(gson.toJson(ri), 1);
+                    resTest = fetchResponseByRequestInfoWithRetry(gson.toJson(ri), 3);
                     trace("OK");
                     String readNumMulti = extractReadNum(resTest);
                     String likeNumMulti = extractLikeNum(resTest);
@@ -653,6 +655,8 @@ public class App {
         msgInfoMap.put("ReadNum", readNum);
         msgInfoMap.put("LikeNum", likeNum);
         msgInfoMap.put("CrawlTimestamp", crawlTs);
+        msgInfoMap.put("PublishDatetime", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Long.parseLong(publishTimestmp) * 1000L));
+        msgInfoMap.put("CrawlDatetime", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Long.parseLong(crawlTs) * 1000L));
 
 //        List<HashMap<String, String>> lstTmp = new ArrayList<HashMap<String, String>>(1);
 //        lstTmp.add(msgInfoMap);
@@ -717,16 +721,24 @@ public class App {
                 ;
     }
 
-    private static String fetchResponseByRequestInfoWithRetry(String requestInfo, int maxRetry) throws IOException {
+    private static String fetchResponseByRequestInfoWithRetry(String requestInfo, int maxRetry) throws IOException, InterruptedException {
         int retry = 0;
         do {
             try {
                 return fetchResponseByRequestInfo(requestInfo);
             } catch (Exception ignore) {
-                trace("Fetching failed with retry " + retry);
+                trace("Fetching failed with retry = " + retry);
+                if (retry == 0) {
+                    trace("Request:" + requestInfo);
+                }
+                if (retry++ >= maxRetry) {
+                    break;
+                }
+                Thread.sleep(WAIT_INTERVAL_L);
             }
-        } while (retry++ < maxRetry);
-        return fetchResponseByRequestInfo(requestInfo);
+        } while (true);
+
+        return null;
     }
 
     private static String fetchResponseByRequestInfo(String requestInfo) throws IOException {
