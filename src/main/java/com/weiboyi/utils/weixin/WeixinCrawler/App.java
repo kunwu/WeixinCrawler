@@ -614,10 +614,16 @@ public class App {
     }
 
     private static String extractMidFromContentUrl(String contentUrl) {
-        Pattern reg = Pattern.compile("mid=(\\d+)&");
+        Pattern reg = Pattern.compile("^.+mid=(\\d+)&.+$");
         Matcher m = reg.matcher(contentUrl);
         if (m.find()) {
             return m.group(1);
+        } else {
+            Pattern regAppMsgId = Pattern.compile("^.+appmsgid=(\\d+)&.+$");
+            m = regAppMsgId.matcher(contentUrl);
+            if (m.find()) {
+                return m.group(1);
+            }
         }
 
         return "";

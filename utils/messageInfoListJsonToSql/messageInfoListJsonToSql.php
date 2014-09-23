@@ -19,7 +19,7 @@ for ($i = 1; $i < count($argv); $i++) {
     }
 
     $jsonLinesOneFile = array();
-    foreach(explode(PHP_EOL, file_get_contents($filePath)) as $line) {
+    foreach (explode(PHP_EOL, file_get_contents($filePath)) as $line) {
         $line = trim($line);
         if (empty($line)) {
             continue;
@@ -45,7 +45,7 @@ $fileJson = $argv[1];
 logger::info("JSON lines loaded: " . count($jsonLines));
 
 $sqlList = array();
-foreach($jsonLines as $json) {
+foreach ($jsonLines as $json) {
     if (empty($json)) {
         continue;
     }
@@ -65,13 +65,38 @@ foreach($jsonLines as $json) {
         $isMulti = 'null';
     }
 
+    if ($msgInfoOneEntry->MessageGroupId == 35408) {
+        print_r($msgInfoOneEntry);
+    }
+
+    $mid = utils::extractMid($contentURL);
+    $appmsgid = utils::extractAppMsgId($contentURL);
+    if (empty($msgInfoOneEntry->MessageGroupId)) {
+        $MessageGroupId = $appmsgid;
+    } else {
+        $MessageGroupId = $msgInfoOneEntry->MessageGroupId;
+    }
+    if (isset($msgInfoOneEntry->CommMsgInfoId)) {
+        $commMsgInfoId = $msgInfoOneEntry->CommMsgInfoId;
+    } else {
+        $commMsgInfoId = $MessageGroupId;
+        $MessageGroupId = empty($mid) ? $appmsgid : $mid;
+    }
+    if (empty($MessageGroupId)) {
+        $MessageGroupId = 'null';
+    }
+    if (empty($commMsgInfoId)) {
+        $commMsgInfoId = 'null';
+    }
+
     $sql = "
 INSERT INTO babysitter_weixin_message_info_fetch_history
-(weixin_id, message_group_id, message_item_index, is_multi, title, content_url, publish_time, read_num, like_num, fetched_time)
+(weixin_id, comm_msg_info_id, message_group_id, message_item_index, is_multi, title, content_url, publish_time, read_num, like_num, fetched_time)
 VALUES
 (
 '{$weixinID}'
-, {$msgInfoOneEntry->MessageGroupId}
+, {$commMsgInfoId}
+, {$MessageGroupId}
 , {$msgInfoOneEntry->MessageItemIndex}
 , {$isMulti}
 , '{$title}'
@@ -79,7 +104,7 @@ VALUES
 , from_unixtime({$msgInfoOneEntry->PublishTimestamp})
 , {$readNum}
 , {$likeNum}
-, from_unixtime({$msgInfoOneEntry->PublishTimestamp})
+, from_unixtime({$msgInfoOneEntry->CrawlTimestamp})
 );
     ";
 
@@ -94,7 +119,8 @@ logger::info("END.");
 
 class utils
 {
-    public static function removeNonUtf8($string) {
+    public static function removeNonUtf8($string)
+    {
         $regex = <<<'END'
 /
   (
@@ -110,7 +136,8 @@ END;
         return preg_replace($regex, '$1', $string);
     }
 
-    public static function removeEmoji($text) {
+    public static function removeEmoji($text)
+    {
         // Match Emoticons
         $regexEmoticons = '/[\x{1F600}-\x{1F64F}]/u';
         $clean_text = preg_replace($regexEmoticons, '', $text);
@@ -136,6 +163,22 @@ END;
         $clean_text = preg_replace($regexTransport, '', $clean_text);
 
         return $clean_text;
+    }
+
+    public static function extractAppMsgId($contentURL)
+    {
+        if (strpos($contentURL, '&appmsgid=') === false) {
+            return '';
+        }
+        return preg_replace('/^.+appmsgid=(\d+)&.+$/', '\1', $contentURL);
+    }
+
+    public static function extractMid($contentURL)
+    {
+        if (strpos($contentURL, '&mid=') === false) {
+            return '';
+        }
+        return preg_replace('/^.+mid=(\d+)&.+$/', '\1', $contentURL);
     }
 }
 
