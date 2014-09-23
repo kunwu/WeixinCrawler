@@ -41,8 +41,9 @@ try {
             res.write('<html><head><title>history</title></head><body>content stripped by proxy</body></html>');
             res.end();
         } else if (req.url == 'http://toufang.weiboyi.com:8080/test.html') {
+            var copyOfInfo = requestInfoForHistoryList;
             res.writeHead(200);
-            res.write(requestInfoForHistoryList);
+            res.write(copyOfInfo);
             res.end();
             requestInfoForHistoryList = '';
         } else {
