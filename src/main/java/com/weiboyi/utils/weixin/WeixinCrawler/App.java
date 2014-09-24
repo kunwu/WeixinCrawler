@@ -28,6 +28,8 @@ public class App {
     public static final String BUTTON_SEARCH_WEIXIN_ID = "//android.widget.Button[@text='Search']";
     public static final String SEARCH_WEIXIN_ID_RESULT_USER_NOT_EXIST = "//android.widget.TextView[@text='This user does not exist']";
     public static final String SEARCH_WEIXIN_ID_RESULT_PROFILE = "//android.widget.TextView[@text='Profile']";
+    public static final String BUTTON_VIEW_HISTORY = "//android.widget.TextView[@text='View history' or @text='查看历史消息']";
+    public static final String PROFILE_PAGE_SCROLL_CONTAINER = "//android.widget.FrameLayout[@content-desc='mm_activity.xml']//android.widget.ListView[@scrollable='true']";
 
     public static final String EOL = System.getProperty("line.separator");
     public static final String STAGE_HISTORY = "HISTORY";
@@ -44,6 +46,7 @@ public class App {
     private static final int WAIT_INTERVAL_L = 10000;
 
     public static final int RETRY_M = 2;
+    public static final double SWIPE_UP_MAX = 2;
 
     public static final int MAX_MESSAGES_EACH_ACCOUNT = 100;
 
@@ -179,7 +182,7 @@ public class App {
                     try {
                         if (stage.equals(STAGE_PROFILE)) {
                             trace("Locate button (View History) ... ", false);
-                            WebElement btnViewHistory = driver.findElement(By.xpath("//android.widget.TextView[@text='View history' or @text='查看历史消息']"));
+                            WebElement btnViewHistory = TryFindElementWithSwipeUp(driver, By.xpath(BUTTON_VIEW_HISTORY));
                             trace("Found.");
 
                             trace("Click button (View History)");
@@ -266,6 +269,8 @@ public class App {
                             trace("Yes and go back.");
                         } catch (NoSuchElementException ignore) {
                             trace("No.");
+                        } catch (WebDriverException ignore) {
+                            trace("No.");
                         }
 
                     } catch (NoSuchElementException e) {
@@ -324,6 +329,41 @@ public class App {
         ));
     }
 
+    private static WebElement TryFindElementWithSwipeUp(AppiumDriver driver, By by) {
+        int swipeCount = 0;
+
+        WebElement elmFound;
+        while (true) {
+            try {
+                elmFound = driver.findElement(by);
+            } catch (WebDriverException ignore) {
+                trace("Element not found, swipe up may required.");
+                elmFound = null;
+            }
+
+            if (elmFound == null) {
+                if (swipeCount++ < SWIPE_UP_MAX) {
+                    trace("Swipe " + swipeCount);
+                    try {
+                        WebElement elmScrollContainer = driver.findElement(By.xpath(PROFILE_PAGE_SCROLL_CONTAINER));
+                        Point elmLocation = elmScrollContainer.getLocation();
+                        Dimension elmSize = elmScrollContainer.getSize();
+                        int xMid = elmLocation.getX() + elmSize.getWidth() / 2;
+                        int yMax = elmLocation.getY() + elmSize.getHeight() - 5;
+                        driver.swipe(xMid, yMax, xMid, 0, WAIT_INTERVAL_XS);
+                    } catch (WebDriverException ignore) {
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                return elmFound;
+            }
+        }
+
+        throw new NoSuchElementException("");
+    }
+
     private static String calcLeftEstimation(int processed, int totalWeixinIDs, long elapsedInMill) {
         if (processed == 0) {
             return "N/A";
@@ -375,16 +415,31 @@ public class App {
             trace("0: user not exist.");
             AccountGenerator.ArchiveWeixinIDNotExist(weixinID);
         } else if (choiceIndex == 1) {
-            trace("1: found.");
-            trace("Locate and click the first result ... ", false);
-            WebElement elmFirstResult = driver.findElement(By.xpath("(//android.widget.FrameLayout[@content-desc='mm_activity.xml']//android.widget.FrameLayout//android.widget.LinearLayout//android.widget.LinearLayout[descendant::android.widget.RelativeLayout])[1]"));
-            elmFirstResult.click();
-            trace("OK.");
-            stage = STAGE_PROFILE;
+            if (hasElement(driver, By.xpath("//android.widget.TextView[@text='Add Contacts']"))) {
+                trace("App return to page (Add Contacts) unexpectedly. Skip the weixinID.");
+                AccountGenerator.ArchiveWeixinIDNotExist(weixinID);
+                stage = STAGE_INIT;
+            } else {
+                trace("1: found.");
+                trace("Locate and click the first result ... ", false);
+                WebElement elmFirstResult = driver.findElement(By.xpath("(//android.widget.FrameLayout[@content-desc='mm_activity.xml']//android.widget.FrameLayout//android.widget.LinearLayout//android.widget.LinearLayout[descendant::android.widget.RelativeLayout])[1]"));
+                elmFirstResult.click();
+                trace("OK.");
+                stage = STAGE_PROFILE;
+            }
         } else {
             trace(choiceIndex.toString() + " invalid choice.");
         }
         return stage;
+    }
+
+    private static boolean hasElement(AppiumDriver driver, By by) {
+        try {
+            WebElement elm = driver.findElement(by);
+            return (elm != null);
+        } catch (Exception ignore) {
+        }
+        return false;
     }
 
     private static void prepareOutputFile() throws IOException {
