@@ -347,7 +347,7 @@ public class App {
         return (new File("." + File.separator + "continue.flag").exists());
     }
 
-    private static WebElement TryFindElementWithSwipeUp(AppiumDriver driver, By by) {
+    private static WebElement TryFindElementWithSwipeUp(AppiumDriver driver, By by) throws IOException {
         int swipeCount = 0;
 
         WebElement elmFound;
@@ -476,7 +476,7 @@ public class App {
             }
         }
 
-        FileWriter fw = new FileWriter(file.getAbsoluteFile());
+        FileWriter fw = new FileWriter(file.getAbsoluteFile(), true);
         return new BufferedWriter(fw);
     }
 
@@ -669,6 +669,7 @@ public class App {
                     sbMsg.append("URL:").append(contentUrlMulti).append(EOL);
 
                     ri.url = formReportUrl(lastRequestInfo, contentUrlMulti);
+                    sbMsg.append("URL_real:").append(ri.url).append(EOL);
                     sec = genSleepSecForNextFetch();
                     trace(String.format("Wait %.1f\" then fetch message content for %s %d/%d - %d/%d %s ... ", sec, weixinID, i + 1, list.size(),
                             j + 1, multiAppMsgItemList.size(), titleMulti), false);
@@ -688,7 +689,6 @@ public class App {
                     if (DBG_OUTPUT_MESSAGE_FULL_HTML) {
                         writeMessageInfo(resTest);
                     }
-                    sbMsg.append("URL_real:").append(ri.url).append(EOL);
                     sbMsg.append("Report:").append(report);
 
                     String crawlTsMulti = String.valueOf(System.currentTimeMillis() / 1000L);
@@ -962,7 +962,7 @@ public class App {
         }
     }
 
-    private static void tryPrintActivity(AppiumDriver driver, int seconds) {
+    private static void tryPrintActivity(AppiumDriver driver, int seconds) throws IOException {
         while (seconds-- > 0) {
             trace(driver.currentActivity());
 
@@ -974,16 +974,36 @@ public class App {
         }
     }
 
-    private static void trace(String msg) {
-        System.out.println(msg);
+    private static void trace(String msg) throws IOException {
+        trace(msg, true);
     }
 
-    private static void trace(String msg, Boolean hasEOL) {
-        if (hasEOL) {
-            System.out.println(msg);
-        } else {
-            System.out.print(msg);
+    private static String rawLogFileName = null;
+    private static BufferedWriter bwRawLog = null;
+
+    private static void trace(String msg, Boolean hasEOL) throws IOException {
+        System.out.print(msg);
+
+        String folder = "." + File.separator + "raw_log";
+        File dir = new File(folder);
+        if (!dir.exists()) {
+            boolean mk = dir.mkdirs();
+            if (!mk) {
+                throw new IOException("Failed to create folder " + folder);
+            }
         }
+
+        String fileName = String.format("raw_log_%s.log", (new SimpleDateFormat("yyyyMMdd_HH")).format(new Date()));
+        if (!fileName.equals(rawLogFileName) || bwRawLog == null) {
+            bwRawLog = createFileWriter(folder, fileName);
+        }
+        bwRawLog.write(msg);
+        if (hasEOL) {
+            System.out.println();
+            bwRawLog.newLine();
+        }
+
+        bwRawLog.flush();
     }
 
     private static void actionOnExceptionElementNotFound(Exception exp) {
