@@ -28,8 +28,9 @@ public class App {
     public static final String BUTTON_SEARCH_WEIXIN_ID = "//android.widget.Button[@text='Search']";
     public static final String SEARCH_WEIXIN_ID_RESULT_USER_NOT_EXIST = "//android.widget.TextView[@text='This user does not exist']";
     public static final String SEARCH_WEIXIN_ID_RESULT_PROFILE = "//android.widget.TextView[@text='Profile']";
-    public static final String BUTTON_VIEW_HISTORY = "//android.widget.TextView[@text='View history' or @text='查看历史消息']";
+    public static final String BUTTON_VIEW_HISTORY = "//android.widget.TextView[@text='View history' or @text='查看历史消息' or @text='历史消息']";
     public static final String PROFILE_PAGE_SCROLL_CONTAINER = "//android.widget.FrameLayout[@content-desc='mm_activity.xml']//android.widget.ListView[@scrollable='true']";
+    public static final String FIRST_ACCOUNT_FROM_FOUND_LIST = "(//android.widget.FrameLayout/android.widget.FrameLayout//android.widget.ListView//android.widget.LinearLayout)[1]";
 
     public static final String EOL = System.getProperty("line.separator");
     public static final String STAGE_HISTORY = "HISTORY";
@@ -43,7 +44,8 @@ public class App {
     public static final int WAIT_INTERVAL_XS = 500;
     public static final int WAIT_INTERVAL_S = 1000;
     public static final int WAIT_INTERVAL_M = 3000;
-    private static final int WAIT_INTERVAL_L = 10000;
+    private static final int WAIT_INTERVAL_L = 5000;
+    private static final int WAIT_INTERVAL_XL = 10000;
 
     public static final int RETRY_M = 2;
     public static final double SWIPE_UP_MAX = 2;
@@ -103,8 +105,15 @@ public class App {
 
             timer.addCheckpoint();
 
+            boolean firstRound = true;
             try {
                 while (true) {
+                    if (!firstRound && !toContinue()) {
+                        trace("Stopped cause continue signal not found.");
+                        break;
+                    }
+                    firstRound = false;
+
                     String stage = STAGE_INIT;
                     String weixinID = AccountGenerator.GetNextWeixinID();
                     if (weixinID == null) {
@@ -239,15 +248,17 @@ public class App {
                         if (stage.equals(STAGE_HISTORY)) {
                             trace("Locate back button on History Page ... ", false);
                             WebElement btnBackFromHistoryPage = driver.findElement(
-                                    By.xpath("//android.widget.LinearLayout[@content-desc='Navigate up']"));
+                                    By.xpath("(//android.widget.ImageView)[1]"));
                             trace("Located.");
 
                             trace("Go back to Profile page ... ", false);
                             btnBackFromHistoryPage.click();
-                            WebDriverWait waitForGoBackToProfilePage = new WebDriverWait(driver, 5);
-                            waitForGoBackToProfilePage.until(ExpectedConditions.presenceOfElementLocated(
-                                    By.xpath(SEARCH_WEIXIN_ID_RESULT_PROFILE)));
-                            trace("Arrived.");
+                            WebElement elmTitleProfile = waitOnElement(driver, By.xpath(SEARCH_WEIXIN_ID_RESULT_PROFILE), WAIT_INTERVAL_M);
+                            if (elmTitleProfile != null) {
+                                trace("Arrived.");
+                            } else {
+                                trace("Failed to detect title Profile");
+                            }
 
                             stage = STAGE_PROFILE;
                         }
@@ -255,7 +266,7 @@ public class App {
                         if (stage.equals(STAGE_PROFILE)) {
                             trace("Locate back button on Profile page and click ... ", false);
                             WebElement btnBackFromProfilePage = driver.findElement(
-                                    By.xpath("//android.widget.FrameLayout[@content-desc='Navigate up']"));
+                                    By.xpath("(//android.widget.ImageView)[1]"));
                             btnBackFromProfilePage.click();
                             trace("Clicked.");
                         }
@@ -265,7 +276,10 @@ public class App {
                         try {
                             trace("Test if at Official Accounts mode (WeChat) ... ", false);
                             WebElement elmTitleWeChat = driver.findElement(By.xpath("//android.widget.TextView[@text='WeChat']"));
-                            elmTitleWeChat.click();
+                            if (elmTitleWeChat != null) {
+                                WebElement elmTitleWeChatGoback = driver.findElement(By.xpath("(//android.widget.ImageView)[1]"));
+                                elmTitleWeChatGoback.click();
+                            }
                             trace("Yes and go back.");
                         } catch (NoSuchElementException ignore) {
                             trace("No.");
@@ -303,9 +317,9 @@ public class App {
             }
 
             trace("Done.");
-            System.out.print("Press ENTER to quit.");
-            int read = System.in.read();
-            System.out.println(read);
+//            System.out.print("Press ENTER to quit.");
+//            int read = System.in.read();
+//            System.out.println(read);
 
         } catch (
                 Exception e
@@ -327,6 +341,10 @@ public class App {
         trace(String.format("===== Total elapsed: %s, avg: %.1f", timer.addCheckpointAndGetTotalElapsed()
                 , 1.0 * timer.calcTotalElapsedInMill() / 1000 / (currentIndex + 1)
         ));
+    }
+
+    private static boolean toContinue() {
+        return (new File("." + File.separator + "continue.flag").exists());
     }
 
     private static WebElement TryFindElementWithSwipeUp(AppiumDriver driver, By by) {
@@ -422,7 +440,7 @@ public class App {
             } else {
                 trace("1: found.");
                 trace("Locate and click the first result ... ", false);
-                WebElement elmFirstResult = driver.findElement(By.xpath("(//android.widget.FrameLayout[@content-desc='mm_activity.xml']//android.widget.FrameLayout//android.widget.LinearLayout//android.widget.LinearLayout[descendant::android.widget.RelativeLayout])[1]"));
+                WebElement elmFirstResult = driver.findElement(By.xpath(FIRST_ACCOUNT_FROM_FOUND_LIST));
                 elmFirstResult.click();
                 trace("OK.");
                 stage = STAGE_PROFILE;
@@ -598,21 +616,34 @@ public class App {
             Gson gson = new Gson();
             RequestInfo ri = gson.fromJson(lastRequestInfo, RequestInfo.class);
             ri.url = formReportUrl(lastRequestInfo, contentUrl);
+            if (ri.url == null) {
+                trace("Invalid contentUrl:" + contentUrl + " Skip.");
+                continue;
+            }
+            sbMsg.append("URL_real:").append(ri.url).append(EOL);
 
             double sec = genSleepSecForNextFetch();
             trace(String.format("Wait %.1f\" then fetch message content for %s %d/%d %s ... ", sec, weixinID, i + 1, list.size(), title), false);
             Thread.sleep((long) (sec * 1000));
             String resTest = fetchResponseByRequestInfoWithRetry(gson.toJson(ri), 3);
+            if (resTest == null) {
+                trace("Skip.");
+                continue;
+            }
             trace("OK.");
             String readNum = extractReadNum(resTest);
             String likeNum = extractLikeNum(resTest);
+            if (readNum.equals("")) {
+                trace("Invalid read number. Please check doc content. Skip.");
+                sbMsg.append("resTest:").append(resTest);
+                continue;
+            }
             writeMessageInfo(ri.url + EOL);
             String report = String.format("===== %d read %s like %s%s", i + 1, readNum, likeNum, EOL);
             writeMessageInfo(report);
             if (DBG_OUTPUT_MESSAGE_FULL_HTML) {
                 writeMessageInfo(resTest);
             }
-            sbMsg.append("URL_real:").append(ri.url).append(EOL);
             sbMsg.append("Report:").append(report);
 
             int msgItemIdx = 0;
@@ -646,6 +677,11 @@ public class App {
                     trace("OK");
                     String readNumMulti = extractReadNum(resTest);
                     String likeNumMulti = extractLikeNum(resTest);
+                    if (readNumMulti.equals("")) {
+                        trace("Invalid read number. Please check doc content. Skip.");
+                        sbMsg.append("resTest:").append(resTest);
+                        continue;
+                    }
                     writeMessageInfo(ri.url + EOL);
                     report = String.format("===== %d - %d read %s like %s%s", i + 1, j + 1, readNumMulti, likeNumMulti, EOL);
                     writeMessageInfo(report);
@@ -734,7 +770,7 @@ public class App {
     }
 
     private static String extractReadNum(String msgHtml) {
-        Pattern reg = Pattern.compile("var\\s+readNum\\s*=\\s*'(.+)'");
+        Pattern reg = Pattern.compile("var\\s+readNum\\s*=\\s*'?(\\d+)'?");
         Matcher m = reg.matcher(msgHtml);
         if (m.find()) {
             return m.group(1);
@@ -744,7 +780,7 @@ public class App {
     }
 
     private static String extractLikeNum(String msgHtml) {
-        Pattern reg = Pattern.compile("var\\s+likeNum\\s*=\\s*'(.+)'");
+        Pattern reg = Pattern.compile("var\\s+likeNum\\s*=\\s*'?(\\d+|赞)'?");
         Matcher m = reg.matcher(msgHtml);
         if (m.find()) {
             return m.group(1);
@@ -754,39 +790,15 @@ public class App {
     }
 
     private static String formReportUrl(String lastRequestInfo, String contentUrl) throws MalformedURLException {
-        URL urlForMessage = new URL(contentUrl);
-        String[] params = urlForMessage.getQuery().split("&");
-        Map<String, String> map = new HashMap<String, String>(10);
-        for (String param : params) {
-            String[] kvs = param.split("=", 2);
-            if (kvs.length == 2) {
-                map.put(kvs[0], kvs[1]);
-            }
-        }
         Gson gson = new Gson();
         RequestInfo lastRi = gson.fromJson(lastRequestInfo, RequestInfo.class);
-        URL urlForKey = new URL(lastRi.url);
-        params = urlForKey.getQuery().split("&");
-        for (String param : params) {
-            String[] kvs = param.split("=");
-            if (kvs.length == 2
-                    && !map.containsKey(kvs[0])) {
-                map.put(kvs[0], kvs[1]);
-            }
-        }
+        URL urlForKey = new URL(StringEscapeUtils.unescapeHtml4(lastRi.url));
 
-        return urlForMessage.getProtocol() + "://" + urlForMessage.getHost() + urlForMessage.getPath() + "?"
-                + "__biz=" + map.get("__biz")
-                + "&" + "mid=" + map.get("mid")
-                + "&" + "idx=" + map.get("idx")
-                + "&" + "sn=" + map.get("sn")
-                + "&" + "scene=" + map.get("scene")
-                + "&" + "uin=" + map.get("uin")
-                + "&" + "key=" + map.get("key")
-                + "&" + "devicetype=" + map.get("devicetype")
-                + "&" + "version=" + map.get("version")
-                + "&" + "lang=" + map.get("lang")
-                ;
+        String msgUrl = StringEscapeUtils.unescapeHtml4(contentUrl);
+        msgUrl = msgUrl.replaceFirst("#.*", "");
+        msgUrl = msgUrl + "&" + urlForKey.getQuery();
+
+        return msgUrl;
     }
 
     private static String fetchResponseByRequestInfoWithRetry(String requestInfo, int maxRetry) throws IOException, InterruptedException {
@@ -807,7 +819,7 @@ public class App {
                 if (retry++ >= maxRetry) {
                     break;
                 }
-                Thread.sleep(WAIT_INTERVAL_L);
+                Thread.sleep(WAIT_INTERVAL_XL);
             }
         } while (true);
 
