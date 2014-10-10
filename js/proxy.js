@@ -1,4 +1,5 @@
 try {
+    var dbgMsgList = 0;
     var http = require('http'),
         httpProxy = require('http-proxy');
 
@@ -11,7 +12,9 @@ try {
 
         console.log(ts + '|' + req.url);
 
-        if (req.url.indexOf('http://monitor.uu.qq.com/analytics/upload') == 0) {
+        if (dbgMsgList == 1) {
+            proxy.web(req, res, { target: req.url });
+        } else if (req.url.indexOf('http://monitor.uu.qq.com/analytics/upload') == 0) {
             console.log('skip tencent analytics.');
             res.writeHead(200);
             res.end();
