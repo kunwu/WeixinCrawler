@@ -40,6 +40,8 @@ public class App {
     public static final String SEARCH_MODE_DIRECT = "DIRECT";
     public static final String SEARCH_MODE_OFFICIAL = "OFFICIAL";
 
+    public static final boolean USE_SYSTEM_NAVIGATE_BACK = true;
+
     public static final int WAIT_INTERVAL_XXS = 100;
     public static final int WAIT_INTERVAL_XS = 500;
     public static final int WAIT_INTERVAL_S = 1000;
@@ -234,6 +236,7 @@ public class App {
                             stage = STAGE_HISTORY;
                         }
                     } catch (NoSuchElementException e) {
+                        AccountGenerator.ArchiveWeixinIDNoHistory(weixinID);
                         trace("\tNo history found. Skip.");
                     } catch (ConnectException eCE) {
                         trace("\tFailed to get request info from proxy due to connection error. Proxy program error likely. Stop.");
@@ -246,29 +249,37 @@ public class App {
 
                     try {
                         if (stage.equals(STAGE_HISTORY)) {
-                            trace("Locate back button on History Page ... ", false);
-                            WebElement btnBackFromHistoryPage = driver.findElement(
-                                    By.xpath("(//android.widget.ImageView)[1]"));
-                            trace("Located.");
-
-                            trace("Go back to Profile page ... ", false);
-                            btnBackFromHistoryPage.click();
-                            WebElement elmTitleProfile = waitOnElement(driver, By.xpath(SEARCH_WEIXIN_ID_RESULT_PROFILE), WAIT_INTERVAL_M);
-                            if (elmTitleProfile != null) {
-                                trace("Arrived.");
+                            if (USE_SYSTEM_NAVIGATE_BACK) {
+                                driver.navigate().back();
                             } else {
-                                trace("Failed to detect title Profile");
+                                trace("Locate back button on History Page ... ", false);
+                                WebElement btnBackFromHistoryPage = driver.findElement(
+                                        By.xpath("(//android.widget.ImageView)[1]"));
+                                trace("Located.");
+
+                                trace("Go back to Profile page ... ", false);
+                                btnBackFromHistoryPage.click();
+                                WebElement elmTitleProfile = waitOnElement(driver, By.xpath(SEARCH_WEIXIN_ID_RESULT_PROFILE), WAIT_INTERVAL_M);
+                                if (elmTitleProfile != null) {
+                                    trace("Arrived.");
+                                } else {
+                                    trace("Failed to detect title Profile");
+                                }
                             }
 
                             stage = STAGE_PROFILE;
                         }
 
                         if (stage.equals(STAGE_PROFILE)) {
-                            trace("Locate back button on Profile page and click ... ", false);
-                            WebElement btnBackFromProfilePage = driver.findElement(
-                                    By.xpath("(//android.widget.ImageView)[1]"));
-                            btnBackFromProfilePage.click();
-                            trace("Clicked.");
+                            if (USE_SYSTEM_NAVIGATE_BACK) {
+                                driver.navigate().back();
+                            } else {
+                                trace("Locate back button on Profile page and click ... ", false);
+                                WebElement btnBackFromProfilePage = driver.findElement(
+                                        By.xpath("(//android.widget.ImageView)[1]"));
+                                btnBackFromProfilePage.click();
+                                trace("Clicked.");
+                            }
                         }
 
                         // test "Official Accounts" mode or "Add Contacts" mode
@@ -421,7 +432,7 @@ public class App {
         trace("Clicked.");
 
         List<By> lstCaseSearchOfficialAccountsResult = new ArrayList<By>(2);
-        lstCaseSearchOfficialAccountsResult.add(By.xpath("//android.widget.TextView[@text='Recommended']"));
+        lstCaseSearchOfficialAccountsResult.add(By.xpath("//android.widget.TextView[@text='Recommended' or @text='No results found']"));
         lstCaseSearchOfficialAccountsResult.add(By.xpath("//android.widget.RelativeLayout"));
         Thread.sleep(WAIT_INTERVAL_M);
         trace("Wait for search result ... ", false);
@@ -577,6 +588,7 @@ public class App {
 
         StringBuilder sbMsg = new StringBuilder();
         JsonArray list = msgListObj.get("list").getAsJsonArray();
+        String report;
         int cntMessage = 0;
         for (int i = 0; i < list.size(); i++) {
             // Extract from JSON
@@ -636,22 +648,22 @@ public class App {
             if (readNum.equals("")) {
                 trace("Invalid read number. Please check doc content. Skip.");
                 sbMsg.append("resTest:").append(resTest);
-                continue;
-            }
-            writeMessageInfo(ri.url + EOL);
-            String report = String.format("===== %d read %s like %s%s", i + 1, readNum, likeNum, EOL);
-            writeMessageInfo(report);
-            if (DBG_OUTPUT_MESSAGE_FULL_HTML) {
-                writeMessageInfo(resTest);
-            }
-            sbMsg.append("Report:").append(report);
+            } else {
+                writeMessageInfo(ri.url + EOL);
+                report = String.format("===== %d read %s like %s%s", i + 1, readNum, likeNum, EOL);
+                writeMessageInfo(report);
+                if (DBG_OUTPUT_MESSAGE_FULL_HTML) {
+                    writeMessageInfo(resTest);
+                }
+                sbMsg.append("Report:").append(report);
 
-            int msgItemIdx = 0;
-            String crawlTs = String.valueOf(System.currentTimeMillis() / 1000L);
-            addToMessageInfoMap(messageInfoList, weixinID, "" + msgItemIdx, groupId, id, dateTime,
-                    title, contentUrl, fileid, is_multi, readNum, likeNum, crawlTs);
-            if (++cntMessage >= MAX_MESSAGES_EACH_ACCOUNT) {
-                break;
+                int msgItemIdx = 0;
+                String crawlTs = String.valueOf(System.currentTimeMillis() / 1000L);
+                addToMessageInfoMap(messageInfoList, weixinID, "" + msgItemIdx, groupId, id, dateTime,
+                        title, contentUrl, fileid, is_multi, readNum, likeNum, crawlTs);
+                if (++cntMessage >= MAX_MESSAGES_EACH_ACCOUNT) {
+                    break;
+                }
             }
 
             if (is_multi.equals("1")) {
@@ -769,9 +781,20 @@ public class App {
         messageInfoList.add(msgInfoMap);
     }
 
+    /*
+    var readNum = '123'
+    var readNum = 123
+    "read_num":"2497"*1,
+     */
     private static String extractReadNum(String msgHtml) {
-        Pattern reg = Pattern.compile("var\\s+readNum\\s*=\\s*'?(\\d+)'?");
+        Pattern reg = Pattern.compile("read_num\\D{1,10}(\\d+)");
         Matcher m = reg.matcher(msgHtml);
+        if (m.find()) {
+            return m.group(1);
+        }
+
+        Pattern reg2 = Pattern.compile("var\\s+readNum\\s*=\\s*'?(\\d+)'?");
+        m = reg2.matcher(msgHtml);
         if (m.find()) {
             return m.group(1);
         }
@@ -780,8 +803,14 @@ public class App {
     }
 
     private static String extractLikeNum(String msgHtml) {
-        Pattern reg = Pattern.compile("var\\s+likeNum\\s*=\\s*'?(\\d+|赞)'?");
+        Pattern reg = Pattern.compile("like_num\\D{1,10}(\\d+|赞)");
         Matcher m = reg.matcher(msgHtml);
+        if (m.find()) {
+            return m.group(1);
+        }
+
+        Pattern reg2 = Pattern.compile("var\\s+likeNum\\s*=\\s*'?(\\d+|赞)'?");
+        m = reg2.matcher(msgHtml);
         if (m.find()) {
             return m.group(1);
         }

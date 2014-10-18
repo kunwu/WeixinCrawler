@@ -6,13 +6,16 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import org.apache.commons.lang3.StringUtils;
 
 public class AccountGenerator {
 
     public static final String FOLDER_INPUT = "input";
     public static final String FILENAME_ARCHIVED = "ArchivedWeixinID.txt";
+    public static final String FILENAME_ARCHIVED_NO_HISTORY = "ArchivedWeixinIDNoHistory.txt";
     private static final String FILENAME_ARCHIVED_SKIP = "ArchivedWeixinIDSkip.txt";
     public static final String ARCHIVE_STATUS_NOT_EXISTS = "NotExists";
+    public static final String ARCHIVE_STATUS_NO_HISTORY = "NoHistory";
     public static final String ARCHIVE_STATUS_COMPLETED = "completed";
     private static Iterator<String> ite = null;
     private static List<String> lstWeixinID = null;
@@ -25,9 +28,11 @@ public class AccountGenerator {
         lstWeixinID = loadSourceWeixinID(isSearchOfficialsMode);
         List<String> archived = loadArchivedWeixinID();
         List<String> skipped = loadSkippedWeixinID();
+        List<String> nohistory = loadNoHisotryWeixinID();
 
         lstWeixinID.removeAll(archived);
         lstWeixinID.removeAll(skipped);
+        lstWeixinID.removeAll(nohistory);
 
         ite = lstWeixinID.iterator();
         total = lstWeixinID.size();
@@ -63,11 +68,17 @@ public class AccountGenerator {
         archiveWeixinIDWithStatus(weixinID, ARCHIVE_STATUS_NOT_EXISTS);
     }
 
+    public static void ArchiveWeixinIDNoHistory(String weixinID) throws Exception {
+        archiveWeixinIDWithStatus(weixinID, ARCHIVE_STATUS_NO_HISTORY);
+    }
+
     private static void archiveWeixinIDWithStatus(String weixinID, String status) throws Exception {
         String filename;
 
         if (status.equals(ARCHIVE_STATUS_NOT_EXISTS)) {
             filename = FILENAME_ARCHIVED_SKIP;
+        } else if (status.equals(ARCHIVE_STATUS_NO_HISTORY)) {
+            filename = FILENAME_ARCHIVED_NO_HISTORY;
         } else if (status.equals(ARCHIVE_STATUS_COMPLETED)) {
             filename = FILENAME_ARCHIVED;
         } else {
@@ -108,6 +119,21 @@ public class AccountGenerator {
     private static List<String> loadSkippedWeixinID() throws IOException {
         ArrayList<String> lstWeixinID = new ArrayList<String>(10);
         String path = "." + File.separator + FOLDER_INPUT + File.separator + FILENAME_ARCHIVED_SKIP;
+        try {
+            BufferedReader br = new BufferedReader(new FileReader(path));
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] sections = line.split("\t");
+                lstWeixinID.add(sections[0]);
+            }
+        } catch (FileNotFoundException ignore) {
+        }
+        return lstWeixinID;
+    }
+
+    private static List<String> loadNoHisotryWeixinID() throws IOException {
+        ArrayList<String> lstWeixinID = new ArrayList<String>(10);
+        String path = "." + File.separator + FOLDER_INPUT + File.separator + FILENAME_ARCHIVED_NO_HISTORY;
         try {
             BufferedReader br = new BufferedReader(new FileReader(path));
             String line;
