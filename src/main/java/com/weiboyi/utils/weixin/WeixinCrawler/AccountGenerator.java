@@ -107,11 +107,14 @@ public class AccountGenerator {
     private static List<String> loadArchivedWeixinID() throws IOException {
         ArrayList<String> lstWeixinID = new ArrayList<String>(10);
         String path = "." + File.separator + FOLDER_INPUT + File.separator + FILENAME_ARCHIVED;
-        BufferedReader br = new BufferedReader(new FileReader(path));
-        String line;
-        while ((line = br.readLine()) != null) {
-            String[] sections = line.split("\t");
-            lstWeixinID.add(sections[0]);
+        try {
+            BufferedReader br = new BufferedReader(new FileReader(path));
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] sections = line.split("\t");
+                lstWeixinID.add(sections[0]);
+            }
+        } catch (FileNotFoundException ignore) {
         }
         return lstWeixinID;
     }
