@@ -57,8 +57,8 @@ public class App {
     private static final boolean DBG_OUTPUT_MESSAGE_FULL_HTML = false;
     private static final boolean DBG_OUTPUT_MESSAGE_LIST_HTML = false;
 
-    // use mid for group id, other than comm_msg_info.id
-    private static final boolean GROUP_ID_USE_MID = true;
+    // use comm_msg_info.id for group id, other than mid
+    private static final boolean GROUP_ID_USE_MID = false;
 
     private static BufferedWriter bwOutputFile = null;
 
